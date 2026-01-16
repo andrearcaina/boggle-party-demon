@@ -1,128 +1,56 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>BOGGLE-PARTY DEMON</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script
-            defer
-            src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-        ></script>
-        <style>
-            [x-cloak] {
-                display: none !important;
-            }
-        </style>
-    </head>
-    <body
-        class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center font-mono"
-    >
-        <div x-data="boggleApp" class="w-full max-w-md p-6 space-y-6">
-            <div class="text-center space-y-2">
-                <h1 class="text-3xl font-bold text-green-400">
-                    BOGGLE-PARTY DEMON
-                </h1>
-                <p class="text-xs text-gray-500 uppercase tracking-widest">
-                    Boggle Character Classifier Interface
-                </p>
-            </div>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BOGGLE-PARTY DEMON</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] {
+            display:none!important;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center font-mono">
+    <div x-data="boggleApp" class="w-full max-w-md p-6 space-y-6">
+    <div class="text-center space-y-2">
+        <h1 class="text-3xl font-bold text-green-400">BOGGLE-PARTY DEMON</h1>
+        <p class="text-xs text-gray-500 uppercase tracking-widest">Boggle Character Classifier Interface</p>
+    </div>
 
-            <div
-                class="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-green-500 transition-colors cursor-pointer relative"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @drop.prevent="handleDrop($event)"
-                :class="{'border-green-500 bg-gray-800': isDragging}"
-            >
-                <input
-                    type="file"
-                    @change="handleFile($event)"
-                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    accept="image/*"
-                />
+    <div class="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-green-500 transition-colors cursor-pointer relative"
+            @dragover.prevent="isDragging=true" @dragleave="isDragging=false" @drop.prevent="handleDrop($event)"
+            :class="{'border-green-500 bg-gray-800': isDragging}">
+        <input type="file" @change="handleFile($event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*" />
+        <template x-if="!previewUrl"><p class="text-gray-400">Drag image or click to upload</p></template>
+        <template x-if="previewUrl"><img :src="previewUrl" class="mx-auto max-h-48 rounded shadow-lg border border-gray-600" /></template>
+    </div>
 
-                <div x-show="!previewUrl">
-                    <p class="text-gray-400">Drag image or click to upload</p>
-                </div>
+    <div x-show="isExtracting" class="text-center text-yellow-400 animate-pulse">Reading via INSANE 100% accurate ML model...</div>
 
-                <div x-show="previewUrl" x-cloak class="relative">
-                    <img
-                        :src="previewUrl"
-                        class="mx-auto max-h-48 rounded shadow-lg border border-gray-600"
-                    />
-                </div>
-            </div>
+    <div x-show="boardString" class="bg-gray-800 p-4 rounded border border-gray-700">
+        <input type="text" x-model="boardString" class="w-full bg-black text-green-400 font-bold text-center p-2 rounded focus:outline-none focus:ring-1 focus:ring-green-500 tracking-widest uppercase" placeholder="Detected Board"/>
+    </div>
 
-            <div
-                x-show="isExtracting"
-                x-cloak
-                class="text-center text-yellow-400 animate-pulse"
-            >
-                Reading via INSANE 100% accurate ML model...
-            </div>
+    <button x-show="boardString && !isExtracting" @click="solveBoard" class="w-full py-3 bg-green-600 hover:bg-green-500 text-black font-bold rounded uppercase tracking-wider transition-all shadow-lg shadow-green-900/50">Solve Board</button>
 
-            <div
-                x-show="boardString"
-                x-cloak
-                class="bg-gray-800 p-4 rounded border border-gray-700 space-y-2"
-            >
-                <label class="text-xs text-gray-500 uppercase"
-                    >Detected Board</label
-                >
-                <input
-                    type="text"
-                    x-model="boardString"
-                    class="w-full bg-black text-green-400 font-bold text-center p-2 rounded focus:outline-none focus:ring-1 focus:ring-green-500 tracking-widest uppercase"
-                />
-            </div>
-
-            <div x-show="boardString && !isExtracting" x-cloak>
-                <button
-                    @click="solveBoard"
-                    class="w-full py-3 bg-green-600 hover:bg-green-500 text-black font-bold rounded uppercase tracking-wider transition-all shadow-lg shadow-green-900/50"
-                >
-                    Solve Board
-                </button>
-            </div>
-
-            <div
-                x-show="solution"
-                x-cloak
-                class="bg-gray-800 p-4 rounded border border-gray-700 space-y-4"
-            >
-                <div
-                    class="flex justify-between items-center border-b border-gray-700 pb-2"
-                >
-                    <span class="text-green-400 font-bold">Results</span>
-                    <span
-                        class="text-xs bg-gray-700 px-2 py-1 rounded"
-                        x-text="solution.total_words + ' words'"
-                    ></span>
-                </div>
-
-                <div
-                    class="grid grid-cols-2 gap-2 text-sm text-gray-300 max-h-60 overflow-y-auto"
-                >
-                    <template x-for="item in solution.best_words">
-                        <div
-                            class="flex justify-between hover:bg-gray-700 p-1 rounded cursor-pointer"
-                        >
-                            <span
-                                x-text="typeof item === 'string' ? item : item[0]"
-                                class="text-white font-medium"
-                            ></span>
-                            <span
-                                x-show="typeof item !== 'string'"
-                                x-text="item[1]"
-                                class="text-gray-500 text-xs"
-                            ></span>
-                        </div>
-                    </template>
-                </div>
-            </div>
+    <div x-show="solution" class="bg-gray-800 p-4 rounded border border-gray-700 space-y-4">
+        <div class="flex justify-between items-center border-b border-gray-700 pb-2">
+        <span class="text-green-400 font-bold">Results</span>
+        <span class="text-xs bg-gray-700 px-2 py-1 rounded" x-text="solution.total_words + ' words'"></span>
         </div>
+        <div class="grid grid-cols-2 gap-2 text-sm text-gray-300 max-h-60 overflow-y-auto">
+        <template x-for="item in solution.best_words">
+            <div class="flex justify-between hover:bg-gray-700 p-1 rounded cursor-pointer">
+            <span x-text="typeof item==='string'?item:item[0]" class="text-white font-medium"></span>
+            <span x-show="typeof item!=='string'" x-text="item[1]" class="text-gray-500 text-xs"></span>
+            </div>
+        </template>
+        </div>
+    </div>
+    </div>
 
-        <script src="/index.js"></script>
-    </body>
+    <script src="/index.js"></script>
+</body>
 </html>
