@@ -4,17 +4,28 @@ import json
 import requests
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from pyggle import Boggle, rank, words
 
 app = FastAPI()
 
-LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
+
+class OCRResponse(BaseModel):
+    """
+    Response model for OCR extraction
+    """
+
+    board: str
 
 
-class BoardRequest(BaseModel):
-    board_string: str
+class SolveResponse(BaseModel):
+    """
+    Response model for solving the Boggle game
+    """
+
+    best_words: list[str]
+    total_words: int
 
 
 @app.get("/")
@@ -27,7 +38,7 @@ async def index_js():
     return FileResponse("index.js")
 
 
-@app.post("/extract-board")
+@app.post("/extract-board", response_model=OCRResponse)
 async def extract_board(file: UploadFile = File(...)):
     """
     Uploads image -> Sends to Local LLM -> Returns "abcd efgh..." string
@@ -42,6 +53,7 @@ async def extract_board(file: UploadFile = File(...)):
     payload = {
         "model": "local-model",
         "temperature": 0.0,
+        "max_tokens": 256,
         "messages": [
             {
                 "role": "user",
@@ -49,13 +61,24 @@ async def extract_board(file: UploadFile = File(...)):
                     {
                         "type": "text",
                         "text": """
-                            "TASK: OCR. EXTRACT THE LETTERS FROM THE N X N BOARD.\n"
-                            "Format: Read row by row, from left to right. Return a JSON 2D array (list of lists) representing N rows by N columns.\n"
-                            "Constraint: Return ONLY the letters. No sentences. No description. NOTHING."
-                            "If a cell contains 'Qu', write it as 'Qu'. THE OUTPUT MUST BE like this:\n"
-                            "Example: [['A', 'B', 'C', 'D'], ['S', 'Qu', 'V', 'A'], ...]\n"
-                            "Output ONLY the JSON."
-                        """,
+TASK: OCR a Boggle board image.
+
+Extract the letters from an N x N board.
+Read row by row, left to right.
+
+Return a JSON 2D array (list of lists).
+Each inner list is one row.
+
+Rules:
+- ONLY return valid JSON.
+- No markdown.
+- No code blocks.
+- No explanation.
+- Use 'Qu' for Q tiles.
+
+Example:
+[['A','B','C','D'],['S','Qu','V','A']]
+""",
                     },
                     {
                         "type": "image_url",
@@ -68,17 +91,28 @@ async def extract_board(file: UploadFile = File(...)):
 
     try:
         # send post request
-        response = requests.post(LM_STUDIO_URL, json=payload)
+        response = requests.post(
+            "http://localhost:1234/v1/chat/completions", json=payload
+        )
         response.raise_for_status()
         result = response.json()
 
         # parse and clean the data given just so we need "content" (the output from LLM)
         raw_content = result["choices"][0]["message"]["content"]
 
-        if "```" in raw_content:
-            raw_content = raw_content.split("```")[1]
-            if raw_content.strip().startswith("json"):
-                raw_content = raw_content.strip()[4:]
+        if not raw_content or not raw_content.strip():
+            raise HTTPException(
+                status_code=502, detail="Model returned empty OCR output"
+            )
+
+        raw_content = raw_content.strip()
+
+        try:
+            board_grid = json.loads(raw_content)
+        except json.JSONDecodeError as e:
+            print("RAW MODEL OUTPUT:")
+            print(raw_content)
+            raise HTTPException(status_code=500, detail="Model returned invalid JSON")
 
         try:
             board_grid = json.loads(raw_content.strip())
@@ -101,7 +135,10 @@ async def extract_board(file: UploadFile = File(...)):
         # final board is now "abcd efgh ijkl mnop"
         final_board = " ".join(rows)
 
-        return {"board": final_board}
+        return JSONResponse(
+            content={"board": final_board},
+            status_code=200,
+        )
 
     except requests.exceptions.ConnectionError:
         raise HTTPException(
@@ -112,20 +149,24 @@ async def extract_board(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/solve-game")
-async def solve_game(request: BoardRequest):
+@app.get("/solve-game/{board_string}", response_model=SolveResponse)
+async def solve_game(board_string: str):
     """
     Receives the board string -> Returns the top 50 words and number of total words
     """
     # used own boggle solver package (pyggle)
-    boggle = Boggle(board=request.board_string, words=[], official=True)
+    boggle = Boggle(board=board_string, words=[], official=True)
 
-    return {
-        "best_words": rank(boggle, top=50),
-        "total_words": len(words(boggle)),
-    }
+    return JSONResponse(
+        content={
+            "best_words": rank(boggle, top=50),
+            "total_words": len(words(boggle)),
+        },
+        status_code=200,
+    )
 
 
 # uvicorn main:app --reload
+# ngrok http 8000
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
